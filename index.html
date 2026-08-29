@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#000000" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="特装ガチャ" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<title>特装ガチャ 2号機</title>
+<style>
+  *{box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;touch-action:none}
+  body{display:grid;place-items:center}
+  #app{position:relative;width:min(100vw,calc(100svh * 1106 / 512));height:min(100svh,calc(100vw * 512 / 1106));aspect-ratio:1106/512;overflow:hidden;background:#000}
+  video,.fallback{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  .fallback{background:url('top.jpg') center/cover no-repeat}
+  #idle{display:block}
+  #gacha{display:none}
+  .tap{position:absolute;z-index:6;border:0;background:transparent;-webkit-tap-highlight-color:transparent;padding:0}
+  #one{left:66%;top:72%;width:15.5%;height:20%}
+  #ten{left:81.2%;top:72%;width:17%;height:20%}
+  #modalWrap{position:absolute;inset:0;display:none;place-items:center;background:#0008;z-index:20;backdrop-filter:blur(2px)}
+  .modal{width:min(72%,620px);padding:clamp(14px,2.3vw,28px);text-align:center;color:#fff;background:linear-gradient(#29252e,#121116);border:2px solid #cdb578;border-radius:15px;box-shadow:0 14px 45px #000}
+  .modal h2{margin:0 0 .6em;color:#f7dfa0;font-size:clamp(18px,2.2vw,30px)}
+  .modal p{font-size:clamp(13px,1.55vw,20px);line-height:1.55;margin:.3em 0 1.2em}
+  .buttons{display:flex;gap:12px;justify-content:center}
+  .buttons button,.again{border:1px solid #d9bd75;border-radius:11px;padding:.65em 1.5em;color:white;font-weight:800;font-size:clamp(14px,1.6vw,20px);background:linear-gradient(#80501d,#3c230d)}
+  .buttons .cancel{background:linear-gradient(#575760,#27272d);border-color:#aaa}
+  #swipeLayer{position:absolute;inset:0;z-index:30;display:none;touch-action:none;cursor:grab}
+  #swipeLayer.active{display:block}
+  #swipeFeedback{position:absolute;left:66%;top:39%;height:45%;width:22%;border-radius:999px;opacity:0;transition:opacity .2s;pointer-events:none}
+  #swipeLayer.dragging #swipeFeedback{opacity:1;background:linear-gradient(to bottom,#ffffff00,#ffffff26,#ffffff00)}
+  #swipeHint{position:absolute;left:50%;bottom:3%;transform:translateX(-50%);padding:.38em .8em;border-radius:999px;background:#0009;color:#fff;border:1px solid #fff5;font-weight:700;font-size:clamp(11px,1.25vw,16px);opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+  #swipeLayer.active #swipeHint{opacity:.85}
+  #ending{position:absolute;inset:0;display:none;align-items:flex-end;justify-content:center;padding-bottom:4%;z-index:35;pointer-events:none}
+  .again{pointer-events:auto;box-shadow:0 5px 22px #000}
+  #rotate{display:none;position:fixed;inset:0;z-index:100;background:#090909;color:#fff;place-items:center;text-align:center;padding:24px}
+  #rotate .box{font-size:18px;line-height:1.7}
+  #rotate .phone{font-size:48px;display:block;margin-bottom:8px;animation:tilt 1.8s ease-in-out infinite}
+  @keyframes tilt{0%,100%{transform:rotate(0)}50%{transform:rotate(90deg)}}
+  @media (orientation:portrait) and (max-width:900px){#rotate{display:grid}}
+</style>
+</head>
+<body>
+<div id="app" aria-label="特装ガチャ 2号機">
+  <div class="fallback"></div>
+  <video id="idle" src="idle.mp4" muted loop playsinline autoplay preload="auto"></video>
+  <video id="gacha" src="gacha_animation.mp4" playsinline preload="auto"></video>
+
+  <button class="tap" id="one" aria-label="1回引く"></button>
+  <button class="tap" id="ten" aria-label="10回引く"></button>
+
+  <div id="modalWrap">
+    <div class="modal">
+      <h2>10回引く</h2>
+      <p>特装団員復刻ガチャを10回引きます。<br>途中の「引け！」は、矢印に沿って指で引いてね。</p>
+      <div class="buttons"><button class="cancel" id="cancel">キャンセル</button><button id="ok">引く！</button></div>
+    </div>
+  </div>
+
+  <div id="swipeLayer">
+    <div id="swipeFeedback"></div>
+    <div id="swipeHint">矢印に沿って ↓ 引く</div>
+  </div>
+  <div id="ending"><button class="again" id="again">もう一度引く</button></div>
+</div>
+
+<div id="rotate"><div class="box"><span class="phone">▯</span>横向きにすると<br>ガチャ画面いっぱいで遊べるよ</div></div>
+<script>
+const idle=document.getElementById('idle');
+const gacha=document.getElementById('gacha');
+const modal=document.getElementById('modalWrap');
+const one=document.getElementById('one');
+const ten=document.getElementById('ten');
+const swipe=document.getElementById('swipeLayer');
+const ending=document.getElementById('ending');
+const PAUSE_TRIGGER=7.28;
+const PAUSE_FRAME=7.52;
+let waitingForPull=false, monitor=0, startX=0,startY=0,lastX=0,lastY=0,tracking=false;
+
+function showButtons(show){one.style.display=show?'block':'none';ten.style.display=show?'block':'none'}
+function openModal(){modal.style.display='grid'}
+ten.addEventListener('click',openModal);
+one.addEventListener('click',openModal);
+document.getElementById('cancel').addEventListener('click',()=>modal.style.display='none');
+
+async function startGacha(){
+  modal.style.display='none'; ending.style.display='none'; swipe.classList.remove('active','dragging'); waitingForPull=false;
+  showButtons(false); idle.pause(); idle.style.display='none'; gacha.style.display='block';
+  gacha.currentTime=0;
+  try{gacha.muted=false; await gacha.play()}catch(e){gacha.muted=true; await gacha.play().catch(()=>{})}
+  cancelAnimationFrame(monitor); monitor=requestAnimationFrame(watchPullFrame);
+}
+function watchPullFrame(){
+  if(!gacha.paused && !waitingForPull && gacha.currentTime>=PAUSE_TRIGGER){
+    gacha.pause(); waitingForPull=true;
+    const onSeek=()=>{gacha.removeEventListener('seeked',onSeek);swipe.classList.add('active')};
+    gacha.addEventListener('seeked',onSeek); gacha.currentTime=PAUSE_FRAME; return;
+  }
+  if(!gacha.ended) monitor=requestAnimationFrame(watchPullFrame);
+}
+document.getElementById('ok').addEventListener('click',startGacha);
+
+function pointerDown(e){
+  if(!waitingForPull)return;
+  tracking=true; startX=lastX=e.clientX; startY=lastY=e.clientY; swipe.classList.add('dragging');
+  if(swipe.setPointerCapture && e.pointerId!==undefined) try{swipe.setPointerCapture(e.pointerId)}catch(_){ }
+}
+function pointerMove(e){if(!tracking)return;lastX=e.clientX;lastY=e.clientY;e.preventDefault()}
+function pointerUp(e){
+  if(!tracking)return; tracking=false; swipe.classList.remove('dragging');
+  const dy=lastY-startY, dx=Math.abs(lastX-startX);
+  const rect=document.getElementById('app').getBoundingClientRect();
+  const startedOnArrow=startX>rect.left+rect.width*.53 && startX<rect.left+rect.width*.92 && startY>rect.top+rect.height*.27 && startY<rect.top+rect.height*.72;
+  const goodPull=startedOnArrow && dy>rect.height*.20 && dx<rect.width*.26;
+  if(goodPull){
+    waitingForPull=false; swipe.classList.remove('active');
+    if(navigator.vibrate) navigator.vibrate(20);
+    gacha.currentTime=7.82; gacha.play().catch(()=>{});
+  }
+}
+swipe.addEventListener('pointerdown',pointerDown);
+swipe.addEventListener('pointermove',pointerMove,{passive:false});
+swipe.addEventListener('pointerup',pointerUp);
+swipe.addEventListener('pointercancel',pointerUp);
+// iOS fallback
+swipe.addEventListener('touchstart',e=>{const t=e.touches[0];pointerDown({clientX:t.clientX,clientY:t.clientY})},{passive:false});
+swipe.addEventListener('touchmove',e=>{const t=e.touches[0];pointerMove({clientX:t.clientX,clientY:t.clientY,preventDefault:()=>e.preventDefault()})},{passive:false});
+swipe.addEventListener('touchend',e=>pointerUp({}),{passive:false});
+
+gacha.addEventListener('ended',()=>{ending.style.display='flex'});
+document.getElementById('again').addEventListener('click',reset);
+function reset(){
+  cancelAnimationFrame(monitor); gacha.pause(); gacha.currentTime=0; gacha.style.display='none';
+  swipe.classList.remove('active','dragging'); ending.style.display='none'; waitingForPull=false;
+  idle.style.display='block'; idle.currentTime=0; idle.muted=true; idle.play().catch(()=>{}); showButtons(true);
+}
+// Try to restart idle animation after returning from background.
+document.addEventListener('visibilitychange',()=>{if(!document.hidden && gacha.style.display==='none') idle.play().catch(()=>{})});
+if('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./sw.js').catch(()=>{});
+</script>
+</body>
+</html>
